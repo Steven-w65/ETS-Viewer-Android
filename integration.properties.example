@@ -1,0 +1,6 @@
+# Supply the signing configuration you are authorized to use.
+# Keep actual values in the ignored integration.properties.
+ets.pid=
+ets.signingSecret=
+# Historical non-secret request serial; change if the issued integration requires it.
+ets.serial=test

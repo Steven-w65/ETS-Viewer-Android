@@ -1,0 +1,95 @@
+# Gradle, Kotlin and Android build output (all modules, including legacy)
+.gradle/
+.kotlin/
+build/
+out/
+.externalNativeBuild/
+.cxx/
+*.class
+*.dex
+*.apk
+*.aab
+*.ap_
+# Keep Gradle Wrapper JARs and project dependencies; do not ignore *.jar.
+
+# IDE and machine-specific settings
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+local.properties
+
+# Private service configuration and APK signing inputs
+integration.properties
+keystore.properties
+signing.properties
+*.jks
+*.keystore
+*.p12
+*.pfx
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+# integration.properties.example remains available for new checkouts.
+
+# Local toolchains, assistant state and generated migration snapshots
+.tools/
+.superpowers/
+/legacy/.migration-generated-before-build/
+
+# Logs, crash dumps, profiling captures and test output
+logs/
+*.log
+*.log.*
+*.logcat
+logcat*.txt
+hs_err_pid*
+replay_pid*
+*.hprof
+*.heapdump
+*.dmp
+captures/
+test-results/
+test-reports/
+reports/
+coverage/
+
+# Local-only test sources and fixtures (all modules)
+**/src/test/
+**/src/androidTest/
+**/src/testFixtures/
+**/src/integrationTest/
+
+# Local project documentation, reports and screenshots
+/docs/
+
+# Generated verification data in archived documentation
+# Keep other source JSON, XML and TXT files outside ignored directories.
+/legacy/docs/**/*.json
+/legacy/docs/**/*.xml
+/legacy/docs/**/*.txt
+
+# Downloaded resources and private application data
+bank-cache/
+com.ets100.secondary/
+
+# Temporary files, editor backups and operating-system metadata
+.cache/
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+*~
+*.swp
+*.swo
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
+/legacy
