@@ -20,7 +20,7 @@ android {
         versionCode = providers.gradleProperty("versionCode").orElse("3").get().toInt().also {
             require(it >= 3) { "versionCode must be at least 3, above the verified legacy version 2" }
         }
-        versionName = providers.gradleProperty("versionName").orElse("1.1.0").get()
+        versionName = providers.gradleProperty("versionName").orElse("1.0.0").get()
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "ETS_PID", quoted(setting("ets.pid")))
         buildConfigField("String", "ETS_SIGNING_SECRET", quoted(setting("ets.signingSecret")))
