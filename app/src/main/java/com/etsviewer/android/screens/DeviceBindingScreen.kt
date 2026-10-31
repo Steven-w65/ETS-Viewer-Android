@@ -9,7 +9,7 @@ import androidx.compose.ui.platform.testTag
 import com.etsviewer.android.ui.*
 
 @Composable
-fun DeviceBindingScreen(message: String, onBind: () -> Unit, onCancel: () -> Unit) {
+fun DeviceBindingScreen(onBind: () -> Unit, onCancel: () -> Unit) {
     val texts = rememberUiStrings()
     AppPage(form = true) {
         AppStatusChip(texts.text(R.string.binding_required), StatusTone.WARNING)
@@ -19,6 +19,6 @@ fun DeviceBindingScreen(message: String, onBind: () -> Unit, onCancel: () -> Uni
         }
         AppPrimaryButton(texts.text(R.string.binding_action), onBind, Modifier.fillMaxWidth().testTag("bind-device"))
         AppSecondaryButton(texts.text(R.string.back_login), onCancel, Modifier.fillMaxWidth().testTag("cancel-binding"))
-        if (message.isNotBlank()) Text(texts.text(R.string.binding_retry_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(texts.text(R.string.binding_retry_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

@@ -2,9 +2,10 @@ package com.etsviewer.core.service
 
 import kotlinx.serialization.json.*
 import java.io.IOException
+import com.etsviewer.core.feedback.DiagnosticKind
 
-class ProtocolFailure(message: String) : IOException(message)
-class ServiceFailure(val code: Int, message: String) : IOException(message)
+class ProtocolFailure(message: String, val diagnostic: DiagnosticKind? = null, cause: Throwable? = null) : IOException(message, cause)
+class ServiceFailure(val code: Int, message: String, val issue: ServiceIssue = serviceIssue(message)) : IOException(message)
 class HttpFailure(val status: Int) : IOException("HTTP $status")
 fun JsonObject.string(key: String): String = (get(key) as? JsonPrimitive)?.contentOrNull.orEmpty()
 fun JsonObject.obj(key: String): JsonObject = get(key) as? JsonObject ?: JsonObject(emptyMap())

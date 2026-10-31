@@ -1,6 +1,5 @@
 package com.etsviewer.android
 
-import com.etsviewer.android.R
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -16,6 +15,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.etsviewer.core.answers.AnswerExport
 import com.etsviewer.core.identity.AccessUiState
+import com.etsviewer.core.identity.AccessWork
+import com.etsviewer.core.feedback.*
 import com.etsviewer.android.screens.*
 import com.etsviewer.android.ui.*
 import kotlinx.coroutines.launch
@@ -32,12 +33,14 @@ class MainActivity : ComponentActivity() {
             val theme by model.theme.collectAsStateWithLifecycle()
             val snackbar = remember { SnackbarHostState() }
             val scope = rememberCoroutineScope()
-            fun notice(value: String) { scope.launch { snackbar.showBriefNotice(value) } }
-            var messageContext by remember { mutableStateOf(ErrorContext.HOMEWORK) }
-            var dismissedReaderMessage by remember { mutableStateOf("") }
-            LaunchedEffect(state.message) { if (state.message.isBlank()) dismissedReaderMessage = "" }
+            fun notice(value: NoticeKind) {
+                val occurrence = AppFeedback.Notice(value)
+                scope.launch { snackbar.showBriefNotice(FeedbackPresenter(AndroidUiStrings(resources)).notice(value), occurrence.id) }
+            }
+            var dismissedReaderFeedbackId by remember { mutableStateOf<Long?>(null) }
+            LaunchedEffect(state.feedback) { if (state.feedback == null) dismissedReaderFeedbackId = null }
             val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
-                if (uri == null) notice(getString(R.string.notice_export_cancelled))
+                if (uri == null) notice(NoticeKind.EXPORT_CANCELLED)
                 model.export(uri)
             }
             val dark = when (theme) { "dark" -> true; "light" -> false; else -> isSystemInDarkTheme() }
@@ -47,35 +50,34 @@ class MainActivity : ComponentActivity() {
                 }
             }
             AppTheme(dark) {
-                AppNoticeEffect(state.message, snackbar)
-                AppNoticeEffect((identity as? AccessUiState.SignedOut)?.message.orEmpty(), snackbar)
+                AppNoticeEffect(state.feedback, snackbar)
+                AppNoticeEffect((identity as? AccessUiState.SignedOut)?.notice, snackbar)
                 AppScaffold(snackbar) {
                     when (val access = identity) {
                         is AccessUiState.VerificationRequired -> {
                             BackHandler { model.cancelChallenge() }
                             key(access.requestId) {
                                 ChallengeScreen({ model.challenge(it, access.requestId) }, model::cancelChallenge,
-                                    { model.rejectChallenge(it, access.requestId) }, model::retryChallenge, access.message, access.expired)
+                                    { model.rejectChallenge(it, access.requestId) }, model::retryChallenge, access.failure, access.expired)
                             }
                         }
                         is AccessUiState.BindingRequired -> {
                             BackHandler { model.cancelBinding() }
-                            DeviceBindingScreen(access.message, model::bindDevice, model::cancelBinding)
+                            DeviceBindingScreen(model::bindDevice, model::cancelBinding)
                         }
                         is AccessUiState.ChooseAccount -> AccountSelectionScreen(access.accounts, model::selectAccount, model::logout)
                         is AccessUiState.SignedIn -> {
                             val document = state.reader
                             if (document != null) {
-                                HomeworkReaderScreen(document, { dismissedReaderMessage = state.message; model.closeReader() }, onExport = {
-                                    messageContext = ErrorContext.EXPORT; model.exportDocument = it; export.launch(AnswerExport.filename(it.title))
-                                }, message = state.message, onRetry = { messageContext = ErrorContext.DOWNLOAD; model.retrySelectedHomework() },
-                                    isRetrying = state.readerRetrying, progress = state.progress, messageContext = messageContext,
+                                HomeworkReaderScreen(document, { dismissedReaderFeedbackId = state.feedback?.id; model.closeReader() }, onExport = {
+                                    model.exportDocument = it; export.launch(AnswerExport.filename(it.title))
+                                }, feedback = state.feedback, onRetry = model::retrySelectedHomework,
+                                    isRetrying = state.readerRetrying, progress = state.progress,
                                     resourceGroups = state.selectedHomework?.resources.orEmpty(), baseUrl = state.selectedBaseUrl)
-                            } else HomeworkListScreen(state.batch, state.period, state.query, state.loading, state.message.takeUnless { it == dismissedReaderMessage }.orEmpty(), state.progress,
-                                model::query, { messageContext = ErrorContext.HOMEWORK; model.refresh(it) },
-                                { messageContext = ErrorContext.HOMEWORK; model.refresh() }, { messageContext = ErrorContext.DOWNLOAD; model.open(it) },
-                                { model.logout(); notice(getString(R.string.notice_logged_out)) }, { messageContext = ErrorContext.CACHE; model.clearCache() },
-                                readingStates, state.clearingCache, messageContext, ::notice, theme,
+                            } else HomeworkListScreen(state.batch, state.period, state.query, state.loading, state.feedback.takeUnless { it?.id == dismissedReaderFeedbackId }, state.progress,
+                                model::query, { model.refresh(it) }, { model.refresh() }, model::open,
+                                { model.logout(); notice(NoticeKind.LOGGED_OUT) }, model::clearCache,
+                                readingStates, state.clearingCache, ::notice, theme,
                                 { switchColorMode(dark, { model.theme.value }, model::cycleTheme) })
                         }
                         else -> PhoneAccessScreen(
@@ -84,12 +86,8 @@ class MainActivity : ComponentActivity() {
                                 is AccessUiState.SignedOut -> access.phone.ifBlank { model.enteredPhone }
                                 else -> model.enteredPhone
                             }, initialPassword = model.enteredPassword, busy = access is AccessUiState.Working,
-                            message = when (access) {
-                                is AccessUiState.Failure -> access.message
-                                is AccessUiState.Working -> access.message
-                                is AccessUiState.SignedOut -> access.message
-                                else -> ""
-                            }, onLogin = model::login,
+                            failure = (access as? AccessUiState.Failure)?.failure,
+                            workingStage = (access as? AccessUiState.Working)?.stage ?: AccessWork.LOGIN, onLogin = model::login,
                             onRestore = if (access is AccessUiState.Failure) model::retrySavedSession else null)
                     }
                     AppSessionFeedback(identity)

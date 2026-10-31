@@ -40,7 +40,8 @@ import androidx.compose.ui.platform.testTag
 
 @Composable private fun AdditionalReferenceAnswersCard(answers: List<String>, identity: String, tag: String) {
     val texts = rememberUiStrings()
-    ReaderContentSurface(Modifier.testTag("additional-answers-$identity")) {
+    ReaderContentSurface(Modifier.testTag("additional-answers-$identity"),
+        contentPadding = PaddingValues(horizontal = AppTokens.compact, vertical = AppTokens.micro)) {
         ExpandableMaterial(texts.text(R.string.answer_additional_count, answers.size), answers.joinToString("\n\n"), "$identity/alternatives", tag)
     }
 }

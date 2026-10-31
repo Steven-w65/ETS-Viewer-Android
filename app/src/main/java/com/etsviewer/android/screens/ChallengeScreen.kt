@@ -1,6 +1,5 @@
 package com.etsviewer.android.screens
 
-import com.etsviewer.android.R
 import android.annotation.SuppressLint
 import android.os.Handler
 import android.os.Looper
@@ -17,8 +16,8 @@ import androidx.webkit.WebMessageCompat
 import com.etsviewer.core.identity.ChallengeCoordinator
 import com.etsviewer.core.identity.ChallengeProof
 import com.etsviewer.core.identity.ChallengeEvent
+import com.etsviewer.core.feedback.*
 import com.etsviewer.android.ui.VerificationFrame
-import com.etsviewer.android.ui.rememberUiStrings
 import kotlinx.serialization.json.*
 import java.net.URI
 
@@ -85,23 +84,22 @@ internal fun attachVerificationCapture(view: WebView, onResponse: (String) -> Un
 fun ChallengeScreen(
     onComplete: (ChallengeProof) -> Unit, onCancel: () -> Unit,
     onRejected: (ChallengeEvent.Rejected) -> Unit, onRetry: () -> Unit,
-    message: String = "", expired: Boolean = false,
+    failure: AppFailure? = null, expired: Boolean = false,
 ) {
-    val texts = rememberUiStrings()
     var browser by remember { mutableStateOf<WebView?>(null) }
     var loading by remember { mutableStateOf(true) }
-    var error by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<AppFailure?>(null) }
     var delivered by remember { mutableStateOf(false) }
     val complete by rememberUpdatedState(onComplete)
     val rejected by rememberUpdatedState(onRejected)
     val receive: (String) -> Unit = { raw ->
         if (!delivered) when (val event = ChallengeCoordinator.decodeEvent(raw)) {
             is ChallengeEvent.Verified -> { delivered = true; complete(event.proof) }
-            is ChallengeEvent.Rejected -> { error = event.message; rejected(event) }
+            is ChallengeEvent.Rejected -> { error = event.failure; rejected(event) }
             null -> Unit
         }
     }
-    VerificationFrame(loading, error, message, expired, onCancel, onRetry) { browserModifier ->
+    VerificationFrame(loading, error ?: failure, expired, onCancel, onRetry) { browserModifier ->
         AndroidView(factory = { context ->
             WebView(context).apply {
                 browser = this
@@ -116,23 +114,23 @@ fun ChallengeScreen(
                 attachVerificationCapture(this, receive)
                 webChromeClient = WebChromeClient()
                 webViewClient = object : WebViewClient() {
-                    override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) { loading = true; error = "" }
+                    override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) { loading = true; error = null }
                     override fun onPageFinished(view: WebView, url: String?) {
                         loading = false
                         if (trustedPage(url)) view.evaluateJavascript(captureScript, null)
                     }
                     override fun onReceivedError(view: WebView, request: WebResourceRequest, failure: WebResourceError) {
-                        if (request.isForMainFrame) { loading = false; error = failure.description.toString() }
+                        if (request.isForMainFrame) { loading = false; error = AppFailure(FeedbackOperation.VERIFICATION, if (failure.errorCode in setOf(WebViewClient.ERROR_HOST_LOOKUP, WebViewClient.ERROR_CONNECT, WebViewClient.ERROR_TIMEOUT)) FailureKind.NETWORK else FailureKind.UNKNOWN) }
                     }
                     override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
-                        if (request.isForMainFrame) { loading = false; error = texts.text(R.string.verification_http_error, response.statusCode) }
+                        if (request.isForMainFrame) { loading = false; error = AppFailure(FeedbackOperation.VERIFICATION, httpStatus = response.statusCode.takeIf { it in 100..599 }) }
                     }
                     override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, failure: android.net.http.SslError) {
-                        handler.cancel(); loading = false; error = texts.text(R.string.verification_tls_error)
+                        handler.cancel(); loading = false; error = AppFailure(FeedbackOperation.VERIFICATION, FailureKind.NETWORK, setOf(DiagnosticKind.TLS))
                     }
                     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                         if (request.url.scheme == "https") return false
-                        error = texts.text(R.string.verification_redirect_error); return true
+                        error = AppFailure(FeedbackOperation.VERIFICATION); return true
                     }
                 }
                 loadUrl(ChallengeCoordinator.PAGE_URL)

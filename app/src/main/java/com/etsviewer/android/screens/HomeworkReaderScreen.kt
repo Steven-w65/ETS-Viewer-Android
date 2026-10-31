@@ -18,13 +18,14 @@ import androidx.compose.ui.unit.dp
 import com.etsviewer.core.answers.*
 import com.etsviewer.core.homework.ResourceGroup
 import com.etsviewer.core.resources.ResourceProgress
+import com.etsviewer.core.feedback.*
 import com.etsviewer.android.ui.*
 import kotlinx.coroutines.flow.collect
 
 @Composable
 fun HomeworkReaderScreen(document: AnswerDocument, onBack: () -> Unit, onExport: (AnswerDocument) -> Unit,
-    message: String = "", onRetry: (() -> Unit)? = null, isRetrying: Boolean = false,
-    progress: ResourceProgress? = null, messageContext: ErrorContext = ErrorContext.EXPORT,
+    feedback: AppFeedback? = null, onRetry: (() -> Unit)? = null, isRetrying: Boolean = false,
+    progress: ResourceProgress? = null,
     resourceGroups: List<ResourceGroup> = emptyList(), baseUrl: String = "") {
     val texts = rememberUiStrings()
     PredictiveBackHandler { events -> events.collect {}; onBack() }
@@ -54,7 +55,7 @@ fun HomeworkReaderScreen(document: AnswerDocument, onBack: () -> Unit, onExport:
             val identity = slot?.page?.resourceId ?: "slot-$index"
             stateHolder.SaveableStateProvider("$readingId/$identity") {
                 ResourceSlotContent(document, slot, onExport, warningExpanded, { warningExpanded = !warningExpanded },
-                    onRetry, isRetrying, progress, message, messageContext, { selectedIndex = it })
+                    onRetry, isRetrying, progress, feedback, { selectedIndex = it })
             }
         }
     }
@@ -67,7 +68,7 @@ fun HomeworkReaderScreen(document: AnswerDocument, onBack: () -> Unit, onExport:
         IconButton({ menu = true }, Modifier.sizeIn(minWidth = AppTokens.touch, minHeight = AppTokens.touch).testTag("reader-more")) {
             Icon(Icons.Outlined.MoreVert, texts.text(R.string.reader_actions))
         }
-        DropdownMenu(menu, { menu = false }) {
+        DropdownMenu(menu, { menu = false }, shape = MaterialTheme.shapes.medium) {
             DropdownMenuItem(text = { Text(texts.text(R.string.answer_export)) }, onClick = { menu = false; onExport(document) }, enabled = document.isReadable,
                 modifier = Modifier.heightIn(min = AppTokens.touch).testTag("export"))
         }
@@ -76,7 +77,7 @@ fun HomeworkReaderScreen(document: AnswerDocument, onBack: () -> Unit, onExport:
 
 @Composable private fun ResourceSlotContent(document: AnswerDocument, slot: ReaderResourceSlot?,
     onExport: (AnswerDocument) -> Unit, warningExpanded: Boolean, onWarningToggle: () -> Unit,
-    onRetry: (() -> Unit)?, isRetrying: Boolean, progress: ResourceProgress?, message: String, messageContext: ErrorContext,
+    onRetry: (() -> Unit)?, isRetrying: Boolean, progress: ResourceProgress?, feedback: AppFeedback?,
     onSelect: (Int) -> Unit) {
     val texts = rememberUiStrings()
     val list = rememberLazyListState()
@@ -91,11 +92,12 @@ fun HomeworkReaderScreen(document: AnswerDocument, onBack: () -> Unit, onExport:
             Text(if (document.isReadable) texts.text(R.string.retry_readable_body) else texts.text(R.string.retry_unreadable_body), style = MaterialTheme.typography.bodySmall)
             LinearProgressIndicator(progress = { progress?.fraction?.coerceIn(0f, 1f) ?: 0f }, modifier = Modifier.fillMaxWidth())
         }
-        if (message.isNotBlank() && FeedbackPresenter(texts).notice(message) == null) item("message") {
-            AppErrorState(message, messageContext, if (messageContext == ErrorContext.EXPORT) ({ onExport(document) }) else onRetry)
+        val failure = (feedback as? AppFeedback.Error)?.failure
+        if (failure != null) item("message") {
+            AppErrorState(failure, if (failure.operation == ErrorContext.EXPORT) ({ onExport(document) }) else onRetry)
         }
         if (page == null) item("unavailable") {
-            Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = MaterialTheme.shapes.medium) {
+            Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = MaterialTheme.shapes.large) {
                 Column(Modifier.fillMaxWidth().padding(AppTokens.compact), verticalArrangement = Arrangement.spacedBy(AppTokens.small)) {
                     val shared = slot?.sharedWithIndex
                     Text(if (shared != null) texts.text(R.string.resource_shared_body, shared + 1) else if (slot == null) texts.text(R.string.reader_no_readable) else texts.text(R.string.resource_unavailable_body),

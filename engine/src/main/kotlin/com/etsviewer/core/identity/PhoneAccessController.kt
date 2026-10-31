@@ -3,6 +3,7 @@ package com.etsviewer.core.identity
 import com.etsviewer.core.accounts.*
 import com.etsviewer.core.homework.*
 import com.etsviewer.core.service.*
+import com.etsviewer.core.feedback.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,10 +26,11 @@ class PhoneAccessController(private val api: CloudApi, private val store: LoginS
         val context = Pending(phone.trim(), password, rememberPassword, generation.incrementAndGet())
         pending = context; accountToken = null; accountChoices = emptyList()
         if (context.phone.isBlank() || password.isEmpty()) {
-            mutable.value = AccessUiState.Failure("请输入手机号和密码", context.phone); return
+            mutable.value = AccessUiState.Failure(AppFailure(FeedbackOperation.LOGIN,
+                if (context.phone.isBlank()) FailureKind.INVALID_PHONE else FailureKind.INVALID_PASSWORD), context.phone); return
         }
         run(context) {
-            mutable.value = AccessUiState.Working("正在登录…")
+            mutable.value = AccessUiState.Working(AccessWork.LOGIN)
             acceptLogin(api.login(context.phone, password, store.installationId()), context)
         }
     }
@@ -43,7 +45,7 @@ class PhoneAccessController(private val api: CloudApi, private val store: LoginS
         val context = Pending(saved.phone, saved.password, saved.password != null, id, saved.account)
         pending = context
         run(context) {
-            mutable.value = AccessUiState.Working("正在恢复登录…")
+            mutable.value = AccessUiState.Working(AccessWork.RESTORE)
             try { completeLogin(saved.token, context) }
             catch (e: Exception) {
                 if (e is CancellationException || !sessionRejected(e)) throw e
@@ -57,7 +59,7 @@ class PhoneAccessController(private val api: CloudApi, private val store: LoginS
         if (state.value !is AccessUiState.BindingRequired || !active(context)) return
         run(context) {
             val password = context.password ?: throw ProtocolFailure("请重新输入密码后绑定设备")
-            mutable.value = AccessUiState.Working("正在绑定设备…")
+            mutable.value = AccessUiState.Working(AccessWork.BINDING)
             acceptLogin(api.bindDevice(context.phone, password, store.installationId()), context)
         }
     }
@@ -69,20 +71,20 @@ class PhoneAccessController(private val api: CloudApi, private val store: LoginS
         val context = pending ?: return
         val challenge = state.value as? AccessUiState.VerificationRequired ?: return
         if (!active(context) || requestId != challenge.requestId || proof.uid.isBlank() || proof.captchaResult.isBlank()) return
-        mutable.value = AccessUiState.Working("正在使用验证凭证登录…")
+        mutable.value = AccessUiState.Working(AccessWork.VERIFIED_LOGIN)
         run(context) {
             val reply = api.continueLogin(proof.uid, proof.captchaResult, store.installationId())
             if (reply.code != null && reply.code != 0 && reply.code != 30014)
-                requestChallenge(context, reply.message.ifBlank { "验证登录失败，请重试" }, ChallengeCoordinator.expired(reply.message), fresh = true)
+                requestChallenge(context, AppFailure(FeedbackOperation.VERIFICATION), ChallengeCoordinator.expired(reply.message), fresh = true)
             else acceptLogin(reply, context)
         }
     }
 
-    fun verificationRejected(message: String, expired: Boolean, requestId: Long) {
+    fun verificationRejected(failure: AppFailure, expired: Boolean, requestId: Long) {
         val context = pending ?: return
         val challenge = state.value as? AccessUiState.VerificationRequired ?: return
         if (active(context) && challenge.requestId == requestId)
-            mutable.value = challenge.copy(message = message, expired = expired)
+            mutable.value = challenge.copy(failure = failure, expired = expired)
     }
 
     fun retryVerification() {
@@ -91,15 +93,15 @@ class PhoneAccessController(private val api: CloudApi, private val store: LoginS
     }
 
     fun cancelChallenge() {
-        cancelPending("已取消验证")
+        cancelPending(NoticeKind.VERIFICATION_CANCELLED)
     }
 
-    fun cancelBinding() { cancelPending("已取消设备绑定") }
+    fun cancelBinding() { cancelPending(NoticeKind.BINDING_CANCELLED) }
 
-    private fun cancelPending(message: String) {
+    private fun cancelPending(notice: NoticeKind) {
         val phone = pending?.phone.orEmpty()
         generation.incrementAndGet(); clearPending()
-        mutable.value = AccessUiState.SignedOut(message, phone)
+        mutable.value = AccessUiState.SignedOut(AppFeedback.Notice(notice), phone)
     }
 
     fun selectAccount(key: String) {
@@ -110,25 +112,25 @@ class PhoneAccessController(private val api: CloudApi, private val store: LoginS
         save(token, account, context)
     }
 
-    private fun requestChallenge(context: Pending, message: String = "", expired: Boolean = false, fresh: Boolean = false) {
+    private fun requestChallenge(context: Pending, failure: AppFailure? = null, expired: Boolean = false, fresh: Boolean = false) {
         if (!active(context)) return
         val next = if (fresh) context.copy(generation = generation.incrementAndGet()) else context
         pending = next
-        mutable.value = AccessUiState.VerificationRequired(next.phone, next.generation, message, expired)
+        mutable.value = AccessUiState.VerificationRequired(next.phone, next.generation, failure, expired)
     }
 
     private suspend fun acceptLogin(reply: EtsReply, context: Pending) {
         if (!active(context)) return
         when {
-            reply.code == 30014 -> mutable.value = AccessUiState.BindingRequired(reply.message.ifBlank { "设备需要绑定" }, context.phone)
-            reply.needsChallenge -> requestChallenge(context, reply.message, ChallengeCoordinator.expired(reply.message))
+            reply.code == 30014 -> mutable.value = AccessUiState.BindingRequired(context.phone)
+            reply.needsChallenge -> requestChallenge(context, AppFailure(FeedbackOperation.VERIFICATION), ChallengeCoordinator.expired(reply.message))
             else -> completeLogin(reply.requireToken(), context)
         }
     }
 
     private suspend fun completeLogin(token: String, context: Pending) {
         if (!active(context)) return
-        mutable.value = AccessUiState.Working("获取账户信息…")
+        mutable.value = AccessUiState.Working(AccessWork.ACCOUNTS)
         val candidates = LearnerAccountSource.preferred(api.accounts(token))
         if (!active(context)) return
         if (candidates.isEmpty()) throw ProtocolFailure("未找到有效的账户信息 (parent_id / 班级已过期或不可用)")
@@ -159,13 +161,13 @@ class PhoneAccessController(private val api: CloudApi, private val store: LoginS
         catch (e: Exception) {
             if (active(context)) {
                 clearPending()
-                mutable.value = AccessUiState.Failure(e.message ?: "登录失败", context.phone)
+                mutable.value = AccessUiState.Failure(FailureClassifier.classify(e, FeedbackOperation.LOGIN), context.phone)
             }
         }
     }
 
     private suspend fun renewSession(session: LoginSession, context: Pending) {
-        mutable.value = AccessUiState.Working("正在更新登录状态…")
+        mutable.value = AccessUiState.Working(AccessWork.RENEW)
         try { acceptLogin(api.renew(session.token), context) }
         catch (e: Exception) {
             if (e is CancellationException || !sessionRejected(e)) throw e
@@ -200,7 +202,7 @@ class PhoneAccessController(private val api: CloudApi, private val store: LoginS
                 if (!sessionRejected(retry)) throw retry
                 if (generation.get() == renewedId) {
                     generation.incrementAndGet(); store.clearSession(); clearPending()
-                    mutable.value = AccessUiState.Failure(retry.message ?: "登录已过期，请重新登录", renewed.session.phone)
+                    mutable.value = AccessUiState.Failure(FailureClassifier.classify(retry, FeedbackOperation.SESSION), renewed.session.phone)
                 }
                 null
             }

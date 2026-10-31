@@ -2,6 +2,7 @@ package com.etsviewer.core.resources
 
 import com.etsviewer.core.service.ProtocolFailure
 import com.etsviewer.core.service.digest
+import com.etsviewer.core.feedback.DiagnosticKind
 import net.lingala.zip4j.ZipFile
 import java.io.File
 import java.io.RandomAccessFile
@@ -19,7 +20,7 @@ class PackageProcessor {
             count
         }
         if (magicSize != 4 || magic[0] != 0x50.toByte() || magic[1] != 0x4b.toByte() ||
-            magic[2].toInt() !in listOf(3, 5, 7)) throw ProtocolFailure("Downloaded resource is not a ZIP archive")
+            magic[2].toInt() !in listOf(3, 5, 7)) throw ProtocolFailure("Downloaded resource is not a ZIP archive", DiagnosticKind.ARCHIVE)
         val footer = if (archive.length() >= 336) RandomAccessFile(archive, "r").use { input ->
             input.seek(input.length() - 336); ByteArray(336).also(input::readFully)
         } else ByteArray(0)
@@ -44,7 +45,7 @@ class PackageProcessor {
             return content
         } catch (e: Exception) {
             output.deleteRecursively()
-            throw ProtocolFailure("Archive processing failed: " + (e.message ?: e.javaClass.simpleName))
+            throw ProtocolFailure("Archive processing failed: " + (e.message ?: e.javaClass.simpleName), DiagnosticKind.ARCHIVE, e)
         }
     }
 

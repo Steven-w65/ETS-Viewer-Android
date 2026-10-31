@@ -11,13 +11,14 @@ import com.etsviewer.core.identity.*
 import com.etsviewer.android.identity.*
 import com.etsviewer.core.resources.*
 import com.etsviewer.core.service.*
+import com.etsviewer.core.feedback.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.io.File
 
 data class HomeworkUiState(
     val batch: HomeworkBatch = HomeworkBatch(), val period: HomeworkPeriod = HomeworkPeriod.CURRENT,
-    val query: String = "", val loading: Boolean = false, val message: String = "",
+    val query: String = "", val loading: Boolean = false, val feedback: AppFeedback? = null,
     val progress: ResourceProgress? = null, val reader: AnswerDocument? = null,
     val selectedHomework: HomeworkEntry? = null, val selectedBaseUrl: String = "", val clearingCache: Boolean = false,
     val readerRetrying: Boolean = false,
@@ -101,7 +102,7 @@ class MainViewModel @JvmOverloads constructor(
     fun bindDevice() { authWork = viewModelScope.launch { access.bindDevice() } }
     fun cancelBinding() { authWork?.cancel(); access.cancelBinding() }
     fun challenge(proof: ChallengeProof, requestId: Long) { authWork = viewModelScope.launch { access.submitChallenge(proof, requestId) } }
-    fun rejectChallenge(event: ChallengeEvent.Rejected, requestId: Long) = access.verificationRejected(event.message, event.expired, requestId)
+    fun rejectChallenge(event: ChallengeEvent.Rejected, requestId: Long) = access.verificationRejected(event.failure, event.expired, requestId)
     fun retryChallenge() = access.retryVerification()
     fun cancelChallenge() { authWork?.cancel(); access.cancelChallenge() }
     fun selectAccount(key: String) = access.selectAccount(key)
@@ -113,12 +114,12 @@ class MainViewModel @JvmOverloads constructor(
         val request = ++listVersion
         val owner = identityVersion
         work = viewModelScope.launch {
-            mutable.update { it.copy(period = period, batch = if (it.period == period) it.batch else HomeworkBatch(), reader = null, loading = true, message = "") }
+            mutable.update { it.copy(period = period, batch = if (it.period == period) it.batch else HomeworkBatch(), reader = null, loading = true, feedback = null) }
             try {
                 val batch = access.homework(period)
                 if (owner == identityVersion && request == listVersion && batch != null) mutable.update { it.copy(batch = batch) }
             } catch (e: CancellationException) { throw e }
-            catch (e: Exception) { if (owner == identityVersion && request == listVersion) mutable.update { it.copy(message = e.message ?: getApplication<Application>().getString(R.string.fallback_homework_error)) } }
+            catch (e: Exception) { if (owner == identityVersion && request == listVersion) mutable.update { it.copy(feedback = AppFeedback.Error(FailureClassifier.classify(e, FeedbackOperation.HOMEWORK))) } }
             finally { if (owner == identityVersion && request == listVersion) mutable.update { it.copy(loading = false) } }
         }
     }
@@ -132,14 +133,14 @@ class MainViewModel @JvmOverloads constructor(
         current.selectedHomework?.let { if (current.progress != null) readings.cancel(it, current.selectedBaseUrl) }
         val selection = ++selectionVersion
         val owner = identityVersion
-        mutable.update { it.copy(selectedHomework = entry, selectedBaseUrl = base, reader = null, message = "", readerRetrying = false,
+        mutable.update { it.copy(selectedHomework = entry, selectedBaseUrl = base, reader = null, feedback = null, readerRetrying = false,
             progress = ResourceProgress(getApplication<Application>().getString(R.string.cache_checking, entry.name), 0f, HomeworkReadPhase.PROCESSING)) }
         resourceWork = viewModelScope.launch {
             try {
                 val document = readings.read(entry, base)
                 if (owner == identityVersion && selection == selectionVersion) mutable.update { it.copy(reader = document, progress = null) }
             } catch (e: CancellationException) { throw e }
-            catch (e: Exception) { if (owner == identityVersion && selection == selectionVersion) mutable.update { it.copy(message = e.message ?: getApplication<Application>().getString(R.string.status_download_failed), progress = null) } }
+            catch (e: Exception) { if (owner == identityVersion && selection == selectionVersion) mutable.update { it.copy(feedback = AppFeedback.Error(FailureClassifier.classify(e, FeedbackOperation.DOWNLOAD)), progress = null) } }
         }
     }
     fun retrySelectedHomework() {
@@ -147,14 +148,14 @@ class MainViewModel @JvmOverloads constructor(
         val entry = current.selectedHomework ?: return
         if (identity.value !is AccessUiState.SignedIn || current.clearingCache || resourceWork?.isActive == true || current.reader?.isComplete == true) return
         val selection = ++selectionVersion; val owner = identityVersion
-        mutable.update { it.copy(readerRetrying = true, message = "") }
+        mutable.update { it.copy(readerRetrying = true, feedback = null) }
         resourceWork = viewModelScope.launch {
             try {
                 val document = readings.read(entry, current.selectedBaseUrl, retryFailed = true)
                 if (owner == identityVersion && selection == selectionVersion) mutable.update { it.copy(reader = document, progress = null, readerRetrying = false) }
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
-                if (owner == identityVersion && selection == selectionVersion) mutable.update { it.copy(message = e.message ?: getApplication<Application>().getString(R.string.fallback_retry_error), progress = null) }
+                if (owner == identityVersion && selection == selectionVersion) mutable.update { it.copy(feedback = AppFeedback.Error(FailureClassifier.classify(e, FeedbackOperation.DOWNLOAD)), progress = null) }
             } finally { if (owner == identityVersion && selection == selectionVersion) mutable.update { it.copy(readerRetrying = false) } }
         }
     }
@@ -170,13 +171,13 @@ class MainViewModel @JvmOverloads constructor(
         if (cacheWork?.isActive == true) return
         val owner = identityVersion
         selectionVersion++; resourceWork?.cancel(); readings.reset()
-        mutable.update { it.copy(reader = null, progress = null, clearingCache = true, message = "", readerRetrying = false) }
+        mutable.update { it.copy(reader = null, progress = null, clearingCache = true, feedback = null, readerRetrying = false) }
         cacheWork = viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) { cache.clear() }
-                if (owner == identityVersion) mutable.update { it.copy(message = getApplication<Application>().getString(R.string.notice_cache_cleared), selectedHomework = null, clearingCache = false) }
+                if (owner == identityVersion) mutable.update { it.copy(feedback = AppFeedback.Notice(NoticeKind.CACHE_CLEARED), selectedHomework = null, clearingCache = false) }
             } catch (e: CancellationException) { throw e }
-            catch (e: Exception) { if (owner == identityVersion) mutable.update { it.copy(message = e.message ?: getApplication<Application>().getString(R.string.feedback_cache_title), clearingCache = false) } }
+            catch (e: Exception) { if (owner == identityVersion) mutable.update { it.copy(feedback = AppFeedback.Error(FailureClassifier.classify(e, FeedbackOperation.CACHE)), clearingCache = false) } }
         }
     }
     fun logout() {
@@ -199,9 +200,9 @@ class MainViewModel @JvmOverloads constructor(
                     val stream = getApplication<Application>().contentResolver.openOutputStream(uri) ?: error(getApplication<Application>().getString(R.string.fallback_export_open_error))
                     stream.bufferedWriter(Charsets.UTF_8).use { it.write(AnswerExport.text(document)) }
                 }
-                if (owner == identityVersion) mutable.update { it.copy(message = getApplication<Application>().getString(R.string.notice_exported)) }
+                if (owner == identityVersion) mutable.update { it.copy(feedback = AppFeedback.Notice(NoticeKind.EXPORTED)) }
             } catch (e: CancellationException) { throw e }
-            catch (e: Exception) { if (owner == identityVersion) mutable.update { it.copy(message = e.message ?: getApplication<Application>().getString(R.string.fallback_export_error)) } }
+            catch (e: Exception) { if (owner == identityVersion) mutable.update { it.copy(feedback = AppFeedback.Error(FailureClassifier.classify(e, FeedbackOperation.EXPORT))) } }
         }
     }
 }

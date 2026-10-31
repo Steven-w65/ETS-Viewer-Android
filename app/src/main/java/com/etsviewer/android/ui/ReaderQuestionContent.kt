@@ -7,7 +7,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.AnnotatedString
 import com.etsviewer.core.answers.*
@@ -35,9 +34,9 @@ import com.etsviewer.core.answers.*
     ReaderContentSurface(Modifier.testTag("question-card-$identity")) {
         Column(if (presentation.hasBody) Modifier.testTag("question-body-$identity") else Modifier,
             verticalArrangement = Arrangement.spacedBy(AppTokens.small)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(AppTokens.compact), verticalAlignment = Alignment.Top) {
+            Column(verticalArrangement = Arrangement.spacedBy(AppTokens.small)) {
                 QuestionNumberBadge(question.number)
-                if (prompt.isNotBlank() || !question.topic.isNullOrBlank()) Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(AppTokens.micro)) {
+                if (prompt.isNotBlank() || !question.topic.isNullOrBlank()) Column(verticalArrangement = Arrangement.spacedBy(AppTokens.micro)) {
                     if (!question.topic.isNullOrBlank()) SelectionContainer { Text(texts.text(R.string.question_topic, question.topic.orEmpty()), style = MaterialTheme.typography.titleMedium) }
                     if (prompt.isNotBlank()) SelectionContainer { Text(prompt, style = MaterialTheme.typography.bodyLarge) }
                 }
@@ -56,10 +55,8 @@ import com.etsviewer.core.answers.*
 
 @Composable private fun QuestionNumberBadge(number: String) {
     val texts = rememberUiStrings()
-    Surface(color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        shape = MaterialTheme.shapes.small) {
-        Text(texts.text(R.string.question_number, number), Modifier.padding(horizontal = AppTokens.small, vertical = AppTokens.micro), style = MaterialTheme.typography.titleMedium)
-    }
+    Text(texts.text(R.string.question_number, number), style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary)
 }
 
 @Composable private fun QuestionOptions(options: List<AnswerOption>, media: @Composable (MediaReference) -> Unit) {

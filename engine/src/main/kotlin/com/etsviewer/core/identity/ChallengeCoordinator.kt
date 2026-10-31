@@ -1,12 +1,14 @@
 package com.etsviewer.core.identity
 
 import com.etsviewer.core.service.string
+import com.etsviewer.core.feedback.*
 import kotlinx.serialization.json.*
 
 data class ChallengeProof(val uid: String, val captchaResult: String)
 sealed interface ChallengeEvent {
     data class Verified(val proof: ChallengeProof) : ChallengeEvent
-    data class Rejected(val message: String, val expired: Boolean = false) : ChallengeEvent
+    data class Rejected(val message: String, val expired: Boolean = false,
+        val failure: AppFailure = AppFailure(FeedbackOperation.VERIFICATION)) : ChallengeEvent
 }
 
 object ChallengeCoordinator {
@@ -19,7 +21,8 @@ object ChallengeCoordinator {
         val transported = "status" in outer && "responseBody" in outer
         val response = if (transported) {
             val status = outer.string("status").toIntOrNull() ?: return null
-            if (status != 200) return ChallengeEvent.Rejected("验证服务 HTTP $status，请重试")
+            if (status != 200) return ChallengeEvent.Rejected("验证服务 HTTP $status，请重试",
+                failure = AppFailure(FeedbackOperation.VERIFICATION, httpStatus = status.takeIf { it in 100..599 }))
             runCatching { Json.parseToJsonElement(outer.string("responseBody")).jsonObject }.getOrNull()
                 ?: return ChallengeEvent.Rejected("验证服务响应无法解析，请重试")
         } else outer

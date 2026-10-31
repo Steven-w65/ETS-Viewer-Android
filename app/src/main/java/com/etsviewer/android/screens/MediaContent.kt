@@ -15,6 +15,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.viewinterop.AndroidView
 import coil.compose.AsyncImage
 import com.etsviewer.core.answers.*
+import com.etsviewer.core.feedback.*
 import com.etsviewer.android.ui.*
 import kotlinx.coroutines.delay
 import java.io.File
@@ -22,11 +23,11 @@ import java.io.File
 @Composable internal fun MediaContent(media: MediaReference, root: String, boundary: String) {
     val texts = rememberUiStrings()
     val source = remember(media, root, boundary) { MediaLocations.resolve(media.reference, root, boundary.ifBlank { root }) }
-    if (source == null) { CompactMediaError(when (media.kind) { MediaKind.IMAGE -> texts.text(R.string.image_error); MediaKind.AUDIO -> texts.text(R.string.audio_error); MediaKind.VIDEO -> texts.text(R.string.video_error) }, "Invalid media path", media.reference.hashCode().toString()); return }
+    if (source == null) { CompactMediaError(when (media.kind) { MediaKind.IMAGE -> texts.text(R.string.image_error); MediaKind.AUDIO -> texts.text(R.string.audio_error); MediaKind.VIDEO -> texts.text(R.string.video_error) }, AppFailure(FeedbackOperation.MEDIA), media.reference.hashCode().toString()); return }
     when (media.kind) {
         MediaKind.IMAGE -> {
             var failed by remember(source) { mutableStateOf(false) }
-            if (failed) CompactMediaError(texts.text(R.string.image_error), "Image unavailable", source.hashCode().toString(), { failed = false })
+            if (failed) CompactMediaError(texts.text(R.string.image_error), AppFailure(FeedbackOperation.MEDIA), source.hashCode().toString(), { failed = false })
             else AsyncImage(model = if (source.startsWith("file:")) File(Uri.parse(source).path.orEmpty()) else source,
                 contentDescription = texts.text(R.string.image_description), modifier = Modifier.fillMaxWidth().heightIn(min = AppTokens.imageMin, max = AppTokens.imageMax).clip(MaterialTheme.shapes.medium),
                 onError = { failed = true })
@@ -42,23 +43,23 @@ import java.io.File
     var player by remember(source) { mutableStateOf<MediaPlayer?>(null) }
     var ready by remember(source) { mutableStateOf(false) }
     var playing by remember(source) { mutableStateOf(false) }
-    var error by remember(source) { mutableStateOf("") }
+    var error by remember(source) { mutableStateOf<AppFailure?>(null) }
     var generation by remember(source) { mutableIntStateOf(0) }
     DisposableEffect(source, generation) {
-        ready = false; playing = false; error = ""
+        ready = false; playing = false; error = null
         val instance = MediaPlayer(); player = instance
         try {
             instance.setDataSource(context, Uri.parse(source))
             instance.setOnPreparedListener { ready = true }
             instance.setOnCompletionListener { playing = false }
-            instance.setOnErrorListener { _, _, _ -> error = "Audio playback failed"; ready = false; playing = false; true }
+            instance.setOnErrorListener { _, _, _ -> error = AppFailure(FeedbackOperation.MEDIA); ready = false; playing = false; true }
             instance.prepareAsync()
-        } catch (_: Exception) { error = "Audio unavailable" }
+        } catch (failure: Exception) { error = FailureClassifier.classify(failure, FeedbackOperation.MEDIA) }
         onDispose { instance.release(); player = null }
     }
-    if (error.isNotBlank()) CompactMediaError(texts.text(R.string.audio_error), error, source.hashCode().toString(), { generation++ })
+    if (error != null) CompactMediaError(texts.text(R.string.audio_error), error!!, source.hashCode().toString(), { generation++ })
     else AppSecondaryButton(if (playing) texts.text(R.string.audio_pause) else if (ready) texts.text(R.string.audio_play) else texts.text(R.string.audio_loading), {
-        runCatching { if (playing) player?.pause() else player?.start(); playing = !playing }.onFailure { error = "Audio playback failed" }
+        runCatching { if (playing) player?.pause() else player?.start(); playing = !playing }.onFailure { error = FailureClassifier.classify(it, FeedbackOperation.MEDIA) }
     }, enabled = ready)
 }
 
@@ -82,7 +83,7 @@ import java.io.File
                 setOnErrorListener { _, _, _ -> failed = true; ready = false; playing = false; true }
             } }, modifier = Modifier.fillMaxWidth().height(if (failed) AppTokens.flat else AppTokens.mediaHeight).clip(MaterialTheme.shapes.medium), onRelease = { it.stopPlayback(); video = null })
         }
-        if (failed) CompactMediaError(texts.text(R.string.video_error), "Video unavailable", source.hashCode().toString(), { generation++ })
+        if (failed) CompactMediaError(texts.text(R.string.video_error), AppFailure(FeedbackOperation.MEDIA), source.hashCode().toString(), { generation++ })
         else {
             AppSecondaryButton(if (playing) texts.text(R.string.video_pause) else if (ready) texts.text(R.string.video_play) else texts.text(R.string.video_loading), {
                 runCatching { if (playing) video?.pause() else video?.start(); playing = !playing }.onFailure { failed = true }

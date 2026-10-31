@@ -3,6 +3,7 @@ package com.etsviewer.core.resources
 import com.etsviewer.core.answers.*
 import com.etsviewer.core.homework.*
 import com.etsviewer.core.service.*
+import com.etsviewer.core.feedback.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.withLock
 import okhttp3.*
@@ -81,7 +82,7 @@ class RemoteResourceLoader(
                 val force = retryFailed && id in failedIds
                 if (!force && cached != null && cached.sections.isNotEmpty()) {
                     pages[id] = fallback!!
-                    if (cached.errors.isNotEmpty()) failures += ResourceReadFailure(id, resource.name, index, cached.errors.joinToString("; "))
+                    if (cached.errors.isNotEmpty()) failures += ResourceReadFailure(id, resource.name, index, cached.errors.joinToString("; "), cached.failure())
                 } else {
                     val pending = File(cache.root, slot.name + ".pending")
                     pending.deleteRecursively(); check(pending.mkdirs())
@@ -102,7 +103,7 @@ class RemoteResourceLoader(
                         currentCoroutineContext().ensureActive()
                         progress(ResourceProgress("解析资源", (completedWork + .9f) / totalWork, HomeworkReadPhase.PROCESSING))
                         val parsed = parseFolder(archive, extraction, File(slot, "content"), resource.name)
-                        if (parsed.sections.isEmpty()) throw ProtocolFailure(parsed.errors.joinToString("; ").ifBlank { "No readable resource content" })
+                        if (parsed.sections.isEmpty()) throw ProtocolFailure(parsed.errors.joinToString("; ").ifBlank { "No readable resource content" }, DiagnosticKind.CONTENT)
                         if (fallback != null && parsed.errors.isNotEmpty() &&
                             fallback.sections.any { oldSection -> parsed.sections.none { it.sourceContentPath == oldSection.sourceContentPath } })
                             throw ProtocolFailure("Retry would discard previously readable resource content")
@@ -110,7 +111,7 @@ class RemoteResourceLoader(
                         File(pending, "complete").writeText(processor.contentFiles(archive, extraction).first().relativeTo(pending).path)
                         publish(pending, slot)
                         pages[id] = ResourceReaderPage(id, resource.name, File(slot, "content").canonicalPath, index, parsed.sections)
-                        if (parsed.errors.isNotEmpty()) failures += ResourceReadFailure(id, resource.name, index, parsed.errors.joinToString("; "))
+                        if (parsed.errors.isNotEmpty()) failures += ResourceReadFailure(id, resource.name, index, parsed.errors.joinToString("; "), parsed.failure())
                     } catch (e: CancellationException) { throw e }
                     catch (e: Exception) {
                         if (fallback != null) pages[id] = fallback
@@ -118,7 +119,7 @@ class RemoteResourceLoader(
                     } finally { pending.deleteRecursively() }
                 }
             } catch (e: CancellationException) { throw e }
-            catch (e: Exception) { failures += ResourceReadFailure(id, resource.name, index, e.message ?: "Resource processing failed") }
+            catch (e: Exception) { failures += ResourceReadFailure(id, resource.name, index, e.message ?: "Resource processing failed", FailureClassifier.classify(e, FeedbackOperation.DOWNLOAD)) }
             finally { if (countsWork) completedWork++ }
         }
         val extra = if (homework.resources.isEmpty()) listOf("此作业没有可读取的云端资源") else emptyList()
@@ -128,9 +129,12 @@ class RemoteResourceLoader(
         result
     } }
 
-    private data class ParsedFolder(val sections: List<AnswerSection>, val errors: List<String>)
+    private data class ParsedFolder(val sections: List<AnswerSection>, val errors: List<String>, val failures: List<AppFailure>) {
+        fun failure(): AppFailure = (failures.firstOrNull() ?: AppFailure(FeedbackOperation.DOWNLOAD, FailureKind.RESOURCE)).copy(
+            diagnostics = failures.flatMap { it.diagnostics }.toSet())
+    }
     private suspend fun parseFolder(archive: File, extracted: File, publishedRoot: File, group: String): ParsedFolder {
-        val sections = mutableListOf<AnswerSection>(); val errors = mutableListOf<String>()
+        val sections = mutableListOf<AnswerSection>(); val errors = mutableListOf<String>(); val failures = mutableListOf<AppFailure>()
         for (content in processor.contentFiles(archive, extracted)) {
             currentCoroutineContext().ensureActive()
             try {
@@ -140,9 +144,13 @@ class RemoteResourceLoader(
                     mediaRoot = File(publishedRoot, relativeParent).canonicalPath, mediaBoundary = publishedRoot.canonicalPath,
                     sourceContentPath = content.relativeTo(extracted.canonicalFile).invariantSeparatorsPath)
             } catch (e: CancellationException) { throw e }
-            catch (e: Exception) { errors += e.message ?: "Content parsing failed" }
+            catch (e: Exception) {
+                errors += e.message ?: "Content parsing failed"
+                val failure = FailureClassifier.classify(e, FeedbackOperation.DOWNLOAD)
+                failures += failure.copy(diagnostics = failure.diagnostics + DiagnosticKind.CONTENT)
+            }
         }
-        return ParsedFolder(sections, errors)
+        return ParsedFolder(sections, errors, failures)
     }
     private suspend fun cachedBundle(slot: File, resource: ResourceGroup): ParsedFolder? {
         if (!File(slot, "complete").isFile) return null

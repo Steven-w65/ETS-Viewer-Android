@@ -18,9 +18,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
@@ -87,7 +89,7 @@ fun switchColorMode(isDark: Boolean, readTheme: () -> String, cycleTheme: () -> 
     }
 }
 @Composable fun AppPrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, icon: ImageVector? = null) {
-    Button(onClick, modifier.heightIn(min = AppTokens.control), enabled, shape = MaterialTheme.shapes.medium,
+    Button(onClick, modifier.heightIn(min = AppTokens.control), enabled, shape = AppPillShape,
         contentPadding = PaddingValues(horizontal = AppTokens.medium, vertical = AppTokens.compact)) {
         icon?.let { Icon(it, null, Modifier.size(AppTokens.statusIcon)); Spacer(Modifier.width(AppTokens.small)) }
         Text(text)
@@ -95,10 +97,10 @@ fun switchColorMode(isDark: Boolean, readTheme: () -> String, cycleTheme: () -> 
 }
 @Composable fun AppCompactAction(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
     TextButton(onClick, modifier.heightIn(min = AppTokens.touch), enabled = enabled,
-        shape = MaterialTheme.shapes.small, contentPadding = PaddingValues(horizontal = AppTokens.small, vertical = AppTokens.small)) { Text(text) }
+        shape = AppPillShape, contentPadding = PaddingValues(horizontal = AppTokens.small, vertical = AppTokens.small)) { Text(text) }
 }
 @Composable fun AppSecondaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, icon: ImageVector? = null) {
-    OutlinedButton(onClick, modifier.heightIn(min = AppTokens.control), enabled, shape = MaterialTheme.shapes.medium,
+    OutlinedButton(onClick, modifier.heightIn(min = AppTokens.control), enabled, shape = AppPillShape,
         border = BorderStroke(AppTokens.border, MaterialTheme.colorScheme.outlineVariant),
         contentPadding = PaddingValues(horizontal = AppTokens.medium, vertical = AppTokens.compact)) {
         icon?.let { Icon(it, null, Modifier.size(AppTokens.statusIcon)); Spacer(Modifier.width(AppTokens.small)) }; Text(text)
@@ -165,9 +167,9 @@ enum class StatusTone { NEUTRAL, PROGRESS, SUCCESS, WARNING, ERROR }
 }
 @Composable fun AppAccountCard(account: LearnerAccount, number: Int? = null, onClick: () -> Unit) {
     val texts = rememberUiStrings()
-    OutlinedCard(onClick, Modifier.fillMaxWidth().testTag("account-${account.key}"), shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(AppTokens.border, MaterialTheme.colorScheme.outlineVariant)) {
-        Row(Modifier.padding(AppTokens.compact).heightIn(min = AppTokens.touch), verticalAlignment = Alignment.CenterVertically,
+    OutlinedCard(onClick, Modifier.fillMaxWidth().testTag("account-${account.key}"), shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), border = BorderStroke(AppTokens.border, MaterialTheme.colorScheme.outlineVariant)) {
+        Row(Modifier.padding(AppTokens.medium).heightIn(min = AppTokens.touch), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(AppTokens.medium)) {
             Icon(Icons.Outlined.Person, null, Modifier.size(AppTokens.icon), tint = MaterialTheme.colorScheme.primary)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(AppTokens.micro)) {
@@ -181,19 +183,47 @@ enum class StatusTone { NEUTRAL, PROGRESS, SUCCESS, WARNING, ERROR }
 }
 @Composable fun HomeworkCard(entry: HomeworkEntry, record: HomeworkReadState, enabled: Boolean, onClick: () -> Unit) {
     val texts = rememberUiStrings()
-    OutlinedCard(onClick, Modifier.fillMaxWidth().testTag("homework-card-${entry.id}"), enabled, shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(AppTokens.border, MaterialTheme.colorScheme.outlineVariant)) {
-        Column(Modifier.padding(AppTokens.compact), verticalArrangement = Arrangement.spacedBy(AppTokens.small)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AppTokens.small)) {
-                Text(entry.name, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, Modifier.size(AppTokens.statusIcon), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    Card(onClick, Modifier.fillMaxWidth().testTag("homework-card-${entry.id}"), enabled, shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val showDecoration = maxWidth >= 360.dp && LocalDensity.current.fontScale <= 1.3f
+            Row(Modifier.fillMaxWidth().padding(AppTokens.medium), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(AppTokens.compact)) {
+                if (showDecoration) HomeworkResourceDecoration()
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(AppTokens.small)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AppTokens.small)) {
+                        Text(entry.name, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, Modifier.size(AppTokens.statusIcon), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AppTokens.small)) {
+                        Text(texts.text(R.string.home_resource_count, entry.resources.size), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        DownloadStatusChip(if (record.isReadable) HomeworkReadPhase.READY else record.phase, compact = true)
+                    }
+                    if (record.isPartial) Text(texts.text(R.string.partial_unavailable), style = MaterialTheme.typography.bodySmall, color = LocalStatusColors.current.onWarning)
+                    if (!record.isReadable && record.phase == HomeworkReadPhase.FAILED) Text(texts.text(R.string.retry_download_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                }
             }
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AppTokens.small)) {
-                Text(texts.text(R.string.home_resource_count, entry.resources.size), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                DownloadStatusChip(if (record.isReadable) HomeworkReadPhase.READY else record.phase, compact = true)
+        }
+    }
+}
+
+@Composable private fun HomeworkResourceDecoration() {
+    Surface(Modifier.size(AppTokens.icon + AppTokens.medium), shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer) {
+        val color = LocalContentColor.current
+        Canvas(Modifier.padding(AppTokens.small)) {
+            scale(size.width / 24f, size.height / 24f, pivot = Offset.Zero) {
+                drawPath(Path().apply {
+                    moveTo(12f, 6f)
+                    cubicTo(10f, 3f, 5f, 3f, 3f, 4f)
+                    lineTo(3f, 19f)
+                    cubicTo(6f, 18f, 9f, 18f, 12f, 21f)
+                    cubicTo(15f, 18f, 18f, 18f, 21f, 19f)
+                    lineTo(21f, 4f)
+                    cubicTo(19f, 3f, 14f, 3f, 12f, 6f)
+                    lineTo(12f, 21f)
+                }, color, style = Stroke(width = 1.5f, cap = StrokeCap.Round))
             }
-            if (record.isPartial) Text(texts.text(R.string.partial_unavailable), style = MaterialTheme.typography.bodySmall, color = LocalStatusColors.current.onWarning)
-            if (!record.isReadable && record.phase == HomeworkReadPhase.FAILED) Text(texts.text(R.string.retry_download_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
         }
     }
 }

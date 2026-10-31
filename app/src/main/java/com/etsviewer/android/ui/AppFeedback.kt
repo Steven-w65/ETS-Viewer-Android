@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
 import com.etsviewer.core.identity.AccessUiState
+import com.etsviewer.core.feedback.*
 
 @Composable fun AppSnackbar(data: SnackbarData) {
     val texts = rememberUiStrings()
@@ -28,14 +29,16 @@ import com.etsviewer.core.identity.AccessUiState
         }
     }
 }
-@Composable fun AppNoticeEffect(message: String, snackbar: SnackbarHostState) {
+@Composable fun AppNoticeEffect(feedback: AppFeedback?, snackbar: SnackbarHostState) {
     val texts = rememberUiStrings()
-    LaunchedEffect(message) { FeedbackPresenter(texts).notice(message)?.let { snackbar.showBriefNotice(it) } }
+    LaunchedEffect(feedback?.id) {
+        (feedback as? AppFeedback.Notice)?.let { snackbar.showBriefNotice(FeedbackPresenter(texts).notice(it.kind), it.id) }
+    }
 }
 @Composable fun AppErrorMessage(error: UiError, onRetry: (() -> Unit)? = null, retryLabel: String = androidx.compose.ui.res.stringResource(R.string.action_retry), retryTag: String = "retry") =
     CompactOperationError(error, onRetry, retryLabel, retryTag)
-@Composable fun AppErrorState(raw: String, context: ErrorContext, onRetry: (() -> Unit)? = null, retryTag: String = "retry", retryLabel: String = androidx.compose.ui.res.stringResource(R.string.action_retry)) =
-    AppErrorMessage(FeedbackPresenter(rememberUiStrings()).error(raw, context), onRetry, retryLabel, retryTag)
+@Composable fun AppErrorState(failure: AppFailure, onRetry: (() -> Unit)? = null, retryTag: String = "retry", retryLabel: String = androidx.compose.ui.res.stringResource(R.string.action_retry)) =
+    AppErrorMessage(FeedbackPresenter(rememberUiStrings()).error(failure), onRetry, retryLabel, retryTag)
 @Composable fun AppConfirmDialog(title: String, message: String, confirm: String, onConfirm: () -> Unit, onDismiss: () -> Unit,
     cancel: String? = androidx.compose.ui.res.stringResource(R.string.action_cancel), warning: Boolean = false) {
     AlertDialog(onDismissRequest = onDismiss, modifier = Modifier.testTag("app-dialog"), shape = MaterialTheme.shapes.extraLarge,

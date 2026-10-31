@@ -77,7 +77,7 @@ import androidx.compose.ui.text.style.TextOverflow
                     Modifier.widthIn(min = AppTokens.touch).testTag("resource-selector").semantics {
                         contentDescription = texts.text(R.string.resource_selector_description, if (slots.isEmpty()) 0 else index + 1, slots.size)
                     }, enabled = slots.isNotEmpty())
-                DropdownMenu(menu, { menu = false }, Modifier.heightIn(max = 360.dp).testTag("resource-menu")) {
+                DropdownMenu(menu, { menu = false }, Modifier.heightIn(max = 360.dp).testTag("resource-menu"), shape = MaterialTheme.shapes.medium) {
                     slots.forEach { slot ->
                         DropdownMenuItem(text = {
                             Column(verticalArrangement = Arrangement.spacedBy(AppTokens.micro)) {
@@ -113,8 +113,8 @@ import androidx.compose.ui.text.style.TextOverflow
     }
     val padding = PaddingValues(horizontal = AppTokens.small, vertical = AppTokens.micro)
     if (forward) Button(onClick, modifier.heightIn(min = AppTokens.touch), enabled = enabled,
-        shape = MaterialTheme.shapes.medium, contentPadding = padding, content = content)
+        shape = AppPillShape, contentPadding = padding, content = content)
     else OutlinedButton(onClick, modifier.heightIn(min = AppTokens.touch), enabled = enabled,
-        shape = MaterialTheme.shapes.medium, border = BorderStroke(AppTokens.border, MaterialTheme.colorScheme.outlineVariant),
+        shape = AppPillShape, border = BorderStroke(AppTokens.border, MaterialTheme.colorScheme.outlineVariant),
         contentPadding = padding, content = content)
 }

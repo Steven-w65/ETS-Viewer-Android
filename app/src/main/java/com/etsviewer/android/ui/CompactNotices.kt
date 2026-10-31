@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
 import com.etsviewer.core.answers.AnswerDocument
+import com.etsviewer.core.feedback.*
 
 @Composable fun ExpandableNotice(title: String, expanded: Boolean, onToggle: () -> Unit, tag: String,
     background: Color, foreground: Color, icon: ImageVector = Icons.Outlined.Info, iconTint: Color = foreground,
@@ -38,11 +39,11 @@ import com.etsviewer.core.answers.AnswerDocument
     }
 }
 
-@Composable fun ExpandableErrorDetails(raw: String, context: ErrorContext, identity: String) {
+@Composable fun ExpandableErrorDetails(failures: List<AppFailure>, identity: String) {
     val texts = rememberUiStrings()
     var expanded by rememberSaveable(identity) { mutableStateOf(false) }
     AppCompactAction(if (expanded) texts.text(R.string.details_collapse) else texts.text(R.string.details_expand), { expanded = !expanded })
-    if (expanded) SelectionContainer { Text(FeedbackPresenter(texts).error(raw, context).details, style = MaterialTheme.typography.bodySmall) }
+    if (expanded) SelectionContainer { Text(FeedbackPresenter(texts).details(failures), style = MaterialTheme.typography.bodySmall) }
 }
 
 @Composable fun CompactOperationError(error: UiError, onRetry: (() -> Unit)?, retryLabel: String, retryTag: String) {
@@ -64,7 +65,8 @@ import com.etsviewer.core.answers.AnswerDocument
     val texts = rememberUiStrings()
     val semantic = LocalStatusColors.current
     val partial = document.isReadable
-    val raw = document.resourceFailures.joinToString("\n") { it.message }.ifBlank { document.failures.joinToString("\n") }
+    val failures = document.resourceFailures.map { it.failure }
+    val failure = failures.firstOrNull() ?: AppFailure(FeedbackOperation.DOWNLOAD)
     ExpandableNotice(if (partial) texts.text(R.string.resource_partial_warning) else texts.text(R.string.resource_failed_warning), expanded, onToggle, "resource-warning",
         if (partial) semantic.warning else MaterialTheme.colorScheme.surfaceContainerHigh,
         if (partial) semantic.onWarning else MaterialTheme.colorScheme.onSurface, Icons.Outlined.Warning) {
@@ -72,20 +74,20 @@ import com.etsviewer.core.answers.AnswerDocument
         val count = if (failed.isNotEmpty()) failed.size else minOf(document.totalResourceCount, document.failures.size)
         Text(if (count > 0) texts.text(R.string.resource_failure_count, count) else texts.text(R.string.resource_none_downloadable), style = MaterialTheme.typography.bodyMedium)
         failed.forEach { failure -> Text(texts.text(R.string.numbered_name, failure.originalGroupIndex + 1, failure.groupName.ifBlank { texts.text(R.string.resource_unnamed) }), style = MaterialTheme.typography.bodySmall) }
-        Text(FeedbackPresenter(texts).error(raw, ErrorContext.DOWNLOAD).message, style = MaterialTheme.typography.bodySmall)
+        Text(FeedbackPresenter(texts).error(failure).message, style = MaterialTheme.typography.bodySmall)
         onRetry?.let { AppCompactAction(if (isRetrying) texts.text(R.string.retrying) else texts.text(R.string.retry_failed_resources), it,
             Modifier.testTag("retry-resources"), enabled = !isRetrying) }
-        ExpandableErrorDetails(raw, ErrorContext.DOWNLOAD, "resource-details-${document.readingId}")
+        ExpandableErrorDetails(failures, "resource-details-${document.readingId}")
     }
 }
 
-@Composable fun CompactMediaError(title: String, raw: String, identity: String, onRetry: (() -> Unit)? = null) {
+@Composable fun CompactMediaError(title: String, failure: AppFailure, identity: String, onRetry: (() -> Unit)? = null) {
     val texts = rememberUiStrings()
     var expanded by rememberSaveable(identity) { mutableStateOf(false) }
     val colors = LocalStatusColors.current
     ExpandableNotice(title, expanded, { expanded = !expanded }, "media-notice-$identity", colors.media, colors.onMedia) {
-        Text(FeedbackPresenter(texts).error(raw, ErrorContext.MEDIA).message, style = MaterialTheme.typography.bodySmall)
+        Text(FeedbackPresenter(texts).error(failure).message, style = MaterialTheme.typography.bodySmall)
         onRetry?.let { AppCompactAction(texts.text(R.string.action_retry), it, Modifier.testTag("retry-media-$identity")) }
-        ExpandableErrorDetails(raw, ErrorContext.MEDIA, "media-details-$identity")
+        ExpandableErrorDetails(listOf(failure), "media-details-$identity")
     }
 }

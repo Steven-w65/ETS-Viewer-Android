@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarData
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarVisuals
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
@@ -25,13 +26,19 @@ val LocalNoticeHeaderHeight = compositionLocalOf<MutableState<Dp>?> { null }
     return onSizeChanged { size -> anchor?.value = with(density) { size.height.toDp() } + extraTop }
 }
 
-suspend fun SnackbarHostState.showBriefNotice(message: String) {
+private data class BriefNoticeVisuals(override val message: String, val occurrenceId: Long?) : SnackbarVisuals {
+    override val actionLabel: String? = null
+    override val withDismissAction = true
+    override val duration = SnackbarDuration.Indefinite
+}
+
+suspend fun SnackbarHostState.showBriefNotice(message: String, occurrenceId: Long? = null) {
     if (message.isBlank()) return
     currentSnackbarData?.let { current ->
-        if (current.visuals.message == message) return
+        if (occurrenceId != null && (current.visuals as? BriefNoticeVisuals)?.occurrenceId == occurrenceId) return
         current.dismiss()
     }
-    showSnackbar(message, withDismissAction = true, duration = SnackbarDuration.Indefinite)
+    showSnackbar(BriefNoticeVisuals(message, occurrenceId))
 }
 
 @Composable fun FloatingNoticeHost(state: SnackbarHostState, modifier: Modifier = Modifier) {

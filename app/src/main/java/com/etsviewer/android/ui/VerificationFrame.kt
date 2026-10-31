@@ -1,6 +1,7 @@
 package com.etsviewer.android.ui
 
 import com.etsviewer.android.R
+import com.etsviewer.core.feedback.AppFailure
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -9,7 +10,7 @@ import androidx.compose.ui.Modifier
 
 /** The service web page keeps its own challenge implementation; only the native surrounding UI is themed. */
 @OptIn(ExperimentalLayoutApi::class)
-@Composable fun VerificationFrame(loading: Boolean, error: String, message: String, expired: Boolean,
+@Composable fun VerificationFrame(loading: Boolean, failure: AppFailure?, expired: Boolean,
     onCancel: () -> Unit, onRetry: () -> Unit, content: @Composable (Modifier) -> Unit) {
     val texts = rememberUiStrings()
     BoxWithConstraints(Modifier.widthIn(max = AppTokens.pageWidth).fillMaxSize()) {
@@ -22,7 +23,7 @@ import androidx.compose.ui.Modifier
             }
             if (expired) AppStatusChip(texts.text(R.string.verification_expired), StatusTone.WARNING)
             if (loading) AppLoadingIndicator(texts.text(R.string.verification_loading))
-            if (error.isNotBlank() || message.isNotBlank()) AppErrorState(error + "\n" + message, ErrorContext.VERIFICATION, onRetry)
+            failure?.let { AppErrorState(it, onRetry) }
             content(Modifier.fillMaxWidth().height(browserHeight))
         }
     }

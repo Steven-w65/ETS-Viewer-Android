@@ -109,8 +109,6 @@
     <string name="verification_retry">重新验证</string>
     <string name="verification_expired">验证已过期</string>
     <string name="verification_loading">正在加载验证页面</string>
-    <string name="verification_redirect_error">验证服务返回了不支持的跳转，请重试或取消验证。</string>
-    <string name="verification_tls_error">验证页面 HTTPS 证书校验失败，请重试。</string>
     <string name="image_error">图片暂时无法显示</string>
     <string name="image_description">题目图片</string>
     <string name="audio_error">音频暂时无法播放</string>
@@ -162,9 +160,6 @@
     <string name="working_binding">正在绑定设备</string>
     <string name="working_renew">正在更新登录状态</string>
     <string name="working_login">正在登录</string>
-    <string name="fallback_homework_error">获取作业失败</string>
-    <string name="fallback_retry_error">资源重试未完成</string>
-    <string name="fallback_export_error">导出失败</string>
     <string name="fallback_export_open_error">无法打开导出文件</string>
     <string name="home_result_count">共 %1$d 份作业</string>
     <string name="home_resource_count">%1$d 个资源组</string>
@@ -187,7 +182,6 @@
     <string name="section_part">第 %1$d 部分</string>
     <string name="diagnostic_type">错误类型：%1$s</string>
     <string name="diagnostic_http">HTTP 状态：%1$s</string>
-    <string name="verification_http_error">验证页面 HTTP %1$d</string>
     <string name="cache_checking">检查缓存: %1$s</string>
     <string name="type_question_answer">问答题</string>
     <string name="type_three_questions">3问5答</string>

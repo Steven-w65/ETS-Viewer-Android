@@ -26,7 +26,8 @@ data class ResourceReaderPage(
 ) {
     init { require(resourceId.isNotBlank() && resourceFolderPath.isNotBlank() && sections.any { it.questions.isNotEmpty() }) }
 }
-data class ResourceReadFailure(val resourceId: String, val groupName: String, val originalGroupIndex: Int, val message: String)
+data class ResourceReadFailure(val resourceId: String, val groupName: String, val originalGroupIndex: Int, val message: String,
+    val failure: com.etsviewer.core.feedback.AppFailure = com.etsviewer.core.feedback.AppFailure(com.etsviewer.core.feedback.FeedbackOperation.DOWNLOAD))
 
 data class AnswerDocument(
     val title: String, val sections: List<AnswerSection>, val failures: List<String> = emptyList(),

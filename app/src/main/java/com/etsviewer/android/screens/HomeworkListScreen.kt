@@ -14,15 +14,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.testTag
 import com.etsviewer.core.homework.*
 import com.etsviewer.core.resources.ResourceProgress
+import com.etsviewer.core.feedback.*
 import com.etsviewer.android.ui.*
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun HomeworkListScreen(batch: HomeworkBatch, period: HomeworkPeriod, query: String, loading: Boolean = false,
-    message: String = "", progress: ResourceProgress? = null, onQuery: (String) -> Unit, onPeriod: (HomeworkPeriod) -> Unit,
+    feedback: AppFeedback? = null, progress: ResourceProgress? = null, onQuery: (String) -> Unit, onPeriod: (HomeworkPeriod) -> Unit,
     onRefresh: () -> Unit, onOpen: (HomeworkEntry) -> Unit, onLogout: () -> Unit, onClearCache: () -> Unit,
     readingStates: Map<String, HomeworkReadState> = emptyMap(), clearingCache: Boolean = false,
-    messageContext: ErrorContext = ErrorContext.HOMEWORK, onNotice: (String) -> Unit = {},
+    onNotice: (NoticeKind) -> Unit = {},
     theme: String = "system", onTheme: () -> Unit = {}) {
     val texts = rememberUiStrings()
     val busy = loading || progress != null || clearingCache
@@ -39,17 +40,18 @@ fun HomeworkListScreen(batch: HomeworkBatch, period: HomeworkPeriod, query: Stri
         }
     }
     val visibleKeys = remember(itemKeys, query) { itemKeys.filter { it.first.name.contains(query.trim(), ignoreCase = true) }.map { it.second } }
-    val hasError = message.isNotBlank() && FeedbackPresenter(texts).notice(message) == null
+    val failure = (feedback as? AppFeedback.Error)?.failure
+    val hasError = failure != null
     LazyColumn(Modifier.widthIn(max = AppTokens.pageWidth).fillMaxSize(), contentPadding = PaddingValues(AppTokens.medium),
         verticalArrangement = Arrangement.spacedBy(AppTokens.compact)) {
         item {
             Column(Modifier.noticeHeaderAnchor(AppTokens.medium)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(texts.text(R.string.home_brand), Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall)
+                    Text(texts.text(R.string.home_brand), Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
                     AppThemeToggle(theme, onTheme)
                     Box {
                         IconButton({ menu = true }, Modifier.sizeIn(minWidth = AppTokens.touch, minHeight = AppTokens.touch).testTag("homework-more")) { Icon(Icons.Outlined.MoreVert, texts.text(R.string.home_more)) }
-                        DropdownMenu(menu, { menu = false }) {
+                        DropdownMenu(menu, { menu = false }, shape = MaterialTheme.shapes.medium) {
                             DropdownMenuItem(text = { Text(texts.text(R.string.cache_clear)) }, onClick = { menu = false; confirmation = "cache" }, enabled = !busy, modifier = Modifier.heightIn(min = AppTokens.touch).testTag("clear-cache"))
                             DropdownMenuItem(text = { Text(texts.text(R.string.logout)) }, onClick = { menu = false; confirmation = "logout" }, modifier = Modifier.heightIn(min = AppTokens.touch).testTag("logout"))
                         }
@@ -64,8 +66,12 @@ fun HomeworkListScreen(batch: HomeworkBatch, period: HomeworkPeriod, query: Stri
         if (loading) item { AppLoadingIndicator(texts.text(R.string.home_loading)) }
         progress?.let { item { AppLoadingIndicator(if (it.phase == HomeworkReadPhase.PROCESSING) texts.text(R.string.resource_processing) else texts.text(R.string.resource_downloading), it.fraction) } }
         if (clearingCache) item { AppLoadingIndicator(texts.text(R.string.cache_clearing)) }
-        if (hasError && (messageContext != ErrorContext.DOWNLOAD || readingStates.values.none { it.phase == HomeworkReadPhase.FAILED }))
-            item { AppErrorState(message, messageContext, if (messageContext == ErrorContext.CACHE) ({ confirmation = "cache" }) else onRefresh, "retry-homework-list") }
+        if (failure != null && (failure.operation != ErrorContext.DOWNLOAD || readingStates.values.none { it.phase == HomeworkReadPhase.FAILED }))
+            item { AppErrorState(failure, when (failure.operation) {
+                ErrorContext.CACHE -> ({ confirmation = "cache" })
+                ErrorContext.HOMEWORK, ErrorContext.DOWNLOAD -> onRefresh
+                else -> null
+            }, "retry-homework-list") }
         if (!busy && !hasError && visible.isEmpty()) item {
             AppEmptyState(if (query.isBlank()) texts.text(R.string.home_empty) else texts.text(R.string.search_empty), if (query.isBlank()) texts.text(R.string.home_empty_body) else texts.text(R.string.search_empty_body),
                 if (query.isBlank()) texts.text(R.string.action_refresh) else texts.text(R.string.search_clear), if (query.isBlank()) onRefresh else ({ onQuery("") }))
@@ -77,7 +83,7 @@ fun HomeworkListScreen(batch: HomeworkBatch, period: HomeworkPeriod, query: Stri
         }
     }
     when (confirmation) {
-        "cache" -> AppConfirmDialog(texts.text(R.string.cache_confirm_title), texts.text(R.string.cache_confirm_body), texts.text(R.string.cache_clear), { confirmation = ""; onClearCache() }, { confirmation = ""; onNotice(texts.text(R.string.notice_cancelled)) }, warning = true)
-        "logout" -> AppConfirmDialog(texts.text(R.string.logout_confirm_title), texts.text(R.string.logout_confirm_body), texts.text(R.string.logout), { confirmation = ""; onLogout() }, { confirmation = ""; onNotice(texts.text(R.string.notice_cancelled)) }, warning = true)
+        "cache" -> AppConfirmDialog(texts.text(R.string.cache_confirm_title), texts.text(R.string.cache_confirm_body), texts.text(R.string.cache_clear), { confirmation = ""; onClearCache() }, { confirmation = ""; onNotice(NoticeKind.CANCELLED) }, warning = true)
+        "logout" -> AppConfirmDialog(texts.text(R.string.logout_confirm_title), texts.text(R.string.logout_confirm_body), texts.text(R.string.logout), { confirmation = ""; onLogout() }, { confirmation = ""; onNotice(NoticeKind.CANCELLED) }, warning = true)
     }
 }

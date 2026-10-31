@@ -2,6 +2,7 @@ package com.etsviewer.core.resources
 
 import com.etsviewer.core.homework.ResourceChecksum
 import com.etsviewer.core.service.ProtocolFailure
+import com.etsviewer.core.feedback.DiagnosticKind
 import java.io.File
 import java.security.MessageDigest
 import java.util.Locale
@@ -15,14 +16,14 @@ internal object ResourceIntegrity {
                 "SHA256" -> "SHA-256"
                 "SHA1" -> "SHA-1"
                 "MD5" -> "MD5"
-                else -> throw ProtocolFailure("Unsupported resource checksum algorithm")
+                else -> throw ProtocolFailure("Unsupported resource checksum algorithm", DiagnosticKind.CHECKSUM)
             }
             val digest = MessageDigest.getInstance(algorithm)
             if (checksum.value.length != digest.digestLength * 2 || !checksum.value.all { it in "0123456789abcdefABCDEF" })
-                throw ProtocolFailure("Invalid resource checksum metadata")
+                throw ProtocolFailure("Invalid resource checksum metadata", DiagnosticKind.CHECKSUM)
             digest to checksum.value
         }
-        if (!file.isFile) throw ProtocolFailure("Missing archive for resource checksum validation")
+        if (!file.isFile) throw ProtocolFailure("Missing archive for resource checksum validation", DiagnosticKind.CHECKSUM)
         file.inputStream().buffered().use { input ->
             val buffer = ByteArray(8192)
             while (true) {
@@ -33,7 +34,7 @@ internal object ResourceIntegrity {
         }
         for ((digest, expected) in digests) {
             val actual = digest.digest().joinToString("") { "%02x".format(it) }
-            if (!actual.equals(expected, ignoreCase = true)) throw ProtocolFailure("Resource checksum mismatch (${digest.algorithm})")
+            if (!actual.equals(expected, ignoreCase = true)) throw ProtocolFailure("Resource checksum mismatch (${digest.algorithm})", DiagnosticKind.CHECKSUM)
         }
     }
 }

@@ -32,10 +32,11 @@ import androidx.compose.ui.semantics.*
         if (expanded) SelectionContainer { Text(text, style = MaterialTheme.typography.bodyLarge) }
     }
 }
-@Composable internal fun ReaderContentSurface(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    OutlinedCard(modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+@Composable internal fun ReaderContentSurface(modifier: Modifier = Modifier,
+    contentPadding: PaddingValues = PaddingValues(AppTokens.medium), content: @Composable ColumnScope.() -> Unit) {
+    OutlinedCard(modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.background),
         border = BorderStroke(AppTokens.border, MaterialTheme.colorScheme.outlineVariant)) {
-        Column(Modifier.padding(AppTokens.medium), verticalArrangement = Arrangement.spacedBy(AppTokens.compact), content = content)
+        Column(Modifier.padding(contentPadding), verticalArrangement = Arrangement.spacedBy(AppTokens.compact), content = content)
     }
 }

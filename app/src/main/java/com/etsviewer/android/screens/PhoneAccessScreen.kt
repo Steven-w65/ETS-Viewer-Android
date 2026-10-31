@@ -14,9 +14,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.*
 import com.etsviewer.android.ui.*
+import com.etsviewer.core.feedback.AppFailure
+import com.etsviewer.core.identity.AccessWork
 
 @Composable
-fun PhoneAccessScreen(initialPhone: String = "", initialPassword: String = "", busy: Boolean = false, message: String = "",
+fun PhoneAccessScreen(initialPhone: String = "", initialPassword: String = "", busy: Boolean = false, failure: AppFailure? = null,
+    workingStage: AccessWork = AccessWork.LOGIN,
     onLogin: (String, String, Boolean) -> Unit, onRestore: (() -> Unit)? = null) {
     val texts = rememberUiStrings()
     var phone by rememberSaveable(initialPhone) { mutableStateOf(initialPhone) }
@@ -25,8 +28,8 @@ fun PhoneAccessScreen(initialPhone: String = "", initialPassword: String = "", b
     var show by remember { mutableStateOf(false) }
     var rememberPassword by rememberSaveable { mutableStateOf(false) }
     var validation by remember { mutableStateOf(LoginValidation()) }
-    var editedSinceError by remember(message, busy) { mutableStateOf(false) }
-    val error = if (!busy && !editedSinceError && message.isNotBlank() && FeedbackPresenter(texts).notice(message) == null) FeedbackPresenter(texts).error(message, ErrorContext.LOGIN) else null
+    var editedSinceError by remember(failure, busy) { mutableStateOf(false) }
+    val error = if (!busy && !editedSinceError) failure?.let { FeedbackPresenter(texts).error(it) } else null
     AppPage(form = true) {
         AppStatusChip(texts.text(R.string.login_cloud))
         AppHeading(texts.text(R.string.login_welcome), texts.text(R.string.login_welcome_body))
@@ -48,7 +51,7 @@ fun PhoneAccessScreen(initialPhone: String = "", initialPassword: String = "", b
             validation = FeedbackPresenter(texts).validateLogin(phone, password)
             if (validation.isValid) onLogin(phone, password, rememberPassword)
         }, Modifier.fillMaxWidth().testTag("login"), enabled = !busy)
-        if (busy) AppLoadingIndicator(FeedbackPresenter(texts).working(message))
+        if (busy) AppLoadingIndicator(FeedbackPresenter(texts).working(workingStage))
         if (error != null && error.field == null) AppErrorMessage(error)
         onRestore?.let { AppSecondaryButton(texts.text(R.string.login_restore_retry), it, Modifier.fillMaxWidth()) }
     }
